@@ -25,6 +25,11 @@ import static org.jetbrains.jps.incremental.ModuleLevelBuilder.ExitCode.*
 import org.eclipse.emf.common.util.URI
 import org.jetbrains.jps.model.module.JpsModule
 import org.jetbrains.jps.model.java.JavaSourceRootType
+import org.eclipse.xtext.ISetup
+import org.jetbrains.jps.service.JpsServiceManager
+import org.eclipse.xtext.ISetupExtension
+import org.jetbrains.jps.incremental.messages.BuildMessage
+import org.jetbrains.jps.incremental.messages.BuildMessage.Kind
 
 class XtextIdeaBuilder extends ModuleLevelBuilder {
 
@@ -45,12 +50,12 @@ class XtextIdeaBuilder extends ModuleLevelBuilder {
 				dirtyFiles.add(file.path)
 				true
 			]
-			val deletedFiles = newArrayList(chunk.representativeTarget)
-			
+			val deletedFiles = newArrayList 
+			deletedFiles += dirtyFilesHolder.getRemovedFiles(chunk.representativeTarget)
 			val xtextBuildData = new XtextBuildData(chunk, context)
 			val buildRequest = new BuildRequest() => [
-				dirtyFiles += dirtyFiles
-				deletedFiles += deletedFiles
+				it.dirtyFiles += dirtyFiles
+				it.deletedFiles += deletedFiles
 				classpath += xtextBuildData.classpath.map[path]
 				sourceRoots += xtextBuildData.sourceRoots.map[path]
 				encoding = xtextBuildData.encoding 
@@ -68,6 +73,7 @@ class XtextIdeaBuilder extends ModuleLevelBuilder {
 			return OK
 		} catch(Exception exc) {
 			LOG.error('Error in build', exc)
+			context.processMessage(new BuildMessage(exc.message, Kind.ERROR) {})
 			return ABORT
 		}
 	}
@@ -97,7 +103,11 @@ class XtextIdeaBuilder extends ModuleLevelBuilder {
 	}
 	
 	override getCompilableFileExtensions() {
-		#['xtend'] // https://bugs.eclipse.org/bugs/show_bug.cgi?id=463202 
+		JpsServiceManager.instance
+			.getExtensions(ISetup)
+			.filter(ISetupExtension)
+			.map[fileExtensions]
+			.flatten.toList
 	}
 	
 //	private def getFileExtension(File file) {

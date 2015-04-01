@@ -11,10 +11,12 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.List;
 import org.apache.log4j.Logger;
 import org.eclipse.emf.common.util.URI;
+import org.eclipse.xtext.ISetup;
+import org.eclipse.xtext.ISetupExtension;
 import org.eclipse.xtext.idea.build.client.DaemonConnector;
 import org.eclipse.xtext.idea.build.daemon.Protocol;
 import org.eclipse.xtext.idea.build.daemon.XtextBuildData;
@@ -43,6 +45,7 @@ import org.jetbrains.jps.model.java.JavaSourceRootType;
 import org.jetbrains.jps.model.module.JpsModule;
 import org.jetbrains.jps.model.module.JpsModuleSourceRoot;
 import org.jetbrains.jps.model.module.JpsTypedModuleSourceRoot;
+import org.jetbrains.jps.service.JpsServiceManager;
 
 @SuppressWarnings("all")
 public class XtextIdeaBuilder extends ModuleLevelBuilder {
@@ -85,15 +88,19 @@ public class XtextIdeaBuilder extends ModuleLevelBuilder {
         }
       };
       dirtyFilesHolder.processDirtyFiles(_function);
+      final ArrayList<String> deletedFiles = CollectionLiterals.<String>newArrayList();
       ModuleBuildTarget _representativeTarget = chunk.representativeTarget();
-      final ArrayList<ModuleBuildTarget> deletedFiles = CollectionLiterals.<ModuleBuildTarget>newArrayList(_representativeTarget);
+      Collection<String> _removedFiles = dirtyFilesHolder.getRemovedFiles(_representativeTarget);
+      Iterables.<String>addAll(deletedFiles, _removedFiles);
       final XtextBuildData xtextBuildData = new XtextBuildData(chunk, context);
       Protocol.BuildRequest _buildRequest = new Protocol.BuildRequest();
       final Procedure1<Protocol.BuildRequest> _function_1 = new Procedure1<Protocol.BuildRequest>() {
         @Override
         public void apply(final Protocol.BuildRequest it) {
-          Iterables.<String>addAll(dirtyFiles, dirtyFiles);
-          Iterables.<ModuleBuildTarget>addAll(deletedFiles, deletedFiles);
+          List<String> _dirtyFiles = it.getDirtyFiles();
+          Iterables.<String>addAll(_dirtyFiles, dirtyFiles);
+          List<String> _deletedFiles = it.getDeletedFiles();
+          Iterables.<String>addAll(_deletedFiles, deletedFiles);
           List<String> _classpath = it.getClasspath();
           List<File> _classpath_1 = xtextBuildData.getClasspath();
           final Function1<File, String> _function = new Function1<File, String>() {
@@ -141,6 +148,9 @@ public class XtextIdeaBuilder extends ModuleLevelBuilder {
       if (_t instanceof Exception) {
         final Exception exc = (Exception)_t;
         XtextIdeaBuilder.LOG.error("Error in build", exc);
+        String _message = exc.getMessage();
+        context.processMessage(new BuildMessage(_message, BuildMessage.Kind.ERROR) {
+        });
         return ModuleLevelBuilder.ExitCode.ABORT;
       } else {
         throw Exceptions.sneakyThrow(_t);
@@ -231,7 +241,18 @@ public class XtextIdeaBuilder extends ModuleLevelBuilder {
   
   @Override
   public List<String> getCompilableFileExtensions() {
-    return Collections.<String>unmodifiableList(CollectionLiterals.<String>newArrayList("xtend"));
+    JpsServiceManager _instance = JpsServiceManager.getInstance();
+    Iterable<ISetup> _extensions = _instance.<ISetup>getExtensions(ISetup.class);
+    Iterable<ISetupExtension> _filter = Iterables.<ISetupExtension>filter(_extensions, ISetupExtension.class);
+    final Function1<ISetupExtension, List<String>> _function = new Function1<ISetupExtension, List<String>>() {
+      @Override
+      public List<String> apply(final ISetupExtension it) {
+        return it.getFileExtensions();
+      }
+    };
+    Iterable<List<String>> _map = IterableExtensions.<ISetupExtension, List<String>>map(_filter, _function);
+    Iterable<String> _flatten = Iterables.<String>concat(_map);
+    return IterableExtensions.<String>toList(_flatten);
   }
   
   @Override
